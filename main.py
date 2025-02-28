@@ -57,6 +57,21 @@ class OcakParcalariUygulamasi(QMainWindow):
         scroll.setMinimumHeight(300)
         radio_widget = QWidget()
         self.radio_layout = QVBoxLayout(radio_widget)
+        self.radio_layout.setSpacing(2)
+        self.radio_layout.setContentsMargins(5, 5, 5, 5)
+        self.radio_layout.setAlignment(Qt.AlignTop)
+        radio_widget.setStyleSheet("""
+            QWidget {
+                background-color: white;
+            }
+            QRadioButton {
+                margin: 1px;
+                padding: 1px;
+                height: 20px;
+                spacing: 5px;
+                border: none;
+            }
+        """)
         scroll.setWidget(radio_widget)
         
         # Radio buton başlığı
@@ -133,8 +148,17 @@ class OcakParcalariUygulamasi(QMainWindow):
             if parca_detaylari and "parcalar" in parca_detaylari:
                 for parca in parca_detaylari["parcalar"]:
                     radio = QRadioButton(parca)
+                    radio.setStyleSheet("""
+                        QRadioButton {
+                            margin: 1px;
+                            padding: 1px;
+                            height: 20px;
+                            spacing: 5px;
+                            border: none;
+                        }
+                    """)
                     self.radio_group.addButton(radio)
-                    self.radio_layout.addWidget(radio)
+                    self.radio_layout.addWidget(radio, 0, Qt.AlignTop)
                     
                 # Maliyet raporunu güncelle
                 self.maliyet_raporu.guncelle_rapor(
