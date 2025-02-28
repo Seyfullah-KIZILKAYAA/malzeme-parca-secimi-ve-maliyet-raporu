@@ -1,17 +1,17 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout,
                             QVBoxLayout, QComboBox, QLabel, QRadioButton, 
-                            QButtonGroup, QFrame, QSplitter, QScrollArea)
+                            QButtonGroup, QFrame, QSplitter, QScrollArea, QPushButton)
 from PyQt5.QtCore import Qt
 from parca_listesi import ParcaVerileri
 from gorsel_gosterici import GorselGosterici
 from maliyet_raporu import MaliyetRaporu
 from db_connection import DatabaseConnection
 
-class OcakParcalariUygulamasi(QMainWindow):
+class TostMakinesiUygulamasi(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Ocak Parçaları Kataloğu")
+        self.setWindowTitle("Tost Makinesi Parçaları Kataloğu")
         self.setGeometry(100, 100, 1800, 800)
         
         self.parca_verileri = ParcaVerileri()
@@ -88,6 +88,24 @@ class OcakParcalariUygulamasi(QMainWindow):
         self.radio_group = QButtonGroup()
         self.radio_group.buttonClicked.connect(self.parca_secildi)
         
+        # Tüm seçimleri kaldır butonu
+        self.reset_button = QPushButton("Tüm Seçimleri Kaldır")
+        self.reset_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                font-weight: bold;
+                padding: 8px;
+                border-radius: 4px;
+                margin-top: 10px;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+        """)
+        self.reset_button.clicked.connect(self.tum_secimleri_kaldir)
+        secim_layout.addWidget(self.reset_button)
+        
         # Seçim grubunu sol frame'e ekle
         left_layout.addWidget(secim_grup)
         
@@ -125,6 +143,20 @@ class OcakParcalariUygulamasi(QMainWindow):
         
         # İlk kategoriyi göster
         self.ana_kategori_secildi(0)
+    
+    def tum_secimleri_kaldir(self):
+        # Tüm seçimleri temizle
+        self.secili_parcalar = {}
+        
+        # Radio butonların seçimini kaldır
+        for button in self.radio_group.buttons():
+            button.setChecked(False)
+        
+        # 3D modeli sıfırla
+        self.gorsel_gosterici.reset_model()
+        
+        # Maliyet raporunu güncelle
+        self.maliyet_raporu.guncelle_parcalar(self.secili_parcalar)
     
     def ana_kategori_secildi(self, index):
         # Alt kategorileri güncelle
@@ -164,14 +196,8 @@ class OcakParcalariUygulamasi(QMainWindow):
                     if secilen_kategori in self.secili_parcalar and self.secili_parcalar[secilen_kategori]["parca_adi"] == parca:
                         radio.setChecked(True)
                 
-                # Görseli güncelle
-                if secilen_kategori in self.secili_parcalar:
-                    parca_adi = self.secili_parcalar[secilen_kategori]["parca_adi"]
-                    gorsel_yolu = f"modeller/{parca_detaylari['gorsel_klasor']}/{parca_adi.lower().replace(' ', '_')}.png"
-                    self.gorsel_gosterici.goster_gorsel(gorsel_yolu)
-                else:
-                    gorsel_yolu = f"modeller/{parca_detaylari['gorsel_klasor']}/{secilen_kategori.lower().replace(' ', '_')}.png"
-                    self.gorsel_gosterici.goster_gorsel(gorsel_yolu)
+                # 3D modeli güncelle
+                self.gorsel_gosterici.update_model_from_selection(self.secili_parcalar)
                 
                 # Maliyet raporunu güncelle
                 self.maliyet_raporu.guncelle_parcalar(self.secili_parcalar)
@@ -192,8 +218,6 @@ class OcakParcalariUygulamasi(QMainWindow):
         secilen_kategori = self.alt_combo.currentText()
         if secilen_kategori in self.parca_verileri.parca_detaylari:
             parca_adi = button.text()
-            gorsel_yolu = f"modeller/{self.parca_verileri.parca_detaylari[secilen_kategori]['gorsel_klasor']}/{parca_adi.lower().replace(' ', '_')}.png"
-            self.gorsel_gosterici.goster_gorsel(gorsel_yolu)
             
             # Fiyatı güvenli bir şekilde al
             try:
@@ -211,6 +235,9 @@ class OcakParcalariUygulamasi(QMainWindow):
                 "fiyat": fiyat
             }
             
+            # 3D modeli güncelle
+            self.gorsel_gosterici.update_model_from_selection(self.secili_parcalar)
+            
             # Maliyet raporunu güncelle
             self.maliyet_raporu.guncelle_parcalar(self.secili_parcalar)
             
@@ -224,6 +251,6 @@ class OcakParcalariUygulamasi(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = OcakParcalariUygulamasi()
+    window = TostMakinesiUygulamasi()
     window.show()
     sys.exit(app.exec_()) 
