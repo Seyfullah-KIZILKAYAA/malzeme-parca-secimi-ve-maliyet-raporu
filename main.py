@@ -195,8 +195,15 @@ class OcakParcalariUygulamasi(QMainWindow):
             gorsel_yolu = f"modeller/{self.parca_verileri.parca_detaylari[secilen_kategori]['gorsel_klasor']}/{parca_adi.lower().replace(' ', '_')}.png"
             self.gorsel_gosterici.goster_gorsel(gorsel_yolu)
             
-            # Fiyatı al (parantez içindeki değeri)
-            fiyat = float(parca_adi.split('(')[1].split('TL')[0].strip())
+            # Fiyatı güvenli bir şekilde al
+            try:
+                # Parantez içindeki son TL değerini bul
+                fiyat_str = parca_adi.split('(')[-1].split(')')[0]
+                # TL'yi kaldır ve sayıya çevir
+                fiyat = float(fiyat_str.replace('TL', '').strip())
+            except (ValueError, IndexError):
+                print(f"Fiyat çıkarılamadı: {parca_adi}")
+                fiyat = 0.0
             
             # Seçilen parçayı kaydet
             self.secili_parcalar[secilen_kategori] = {
@@ -206,6 +213,14 @@ class OcakParcalariUygulamasi(QMainWindow):
             
             # Maliyet raporunu güncelle
             self.maliyet_raporu.guncelle_parcalar(self.secili_parcalar)
+            
+            # Bir sonraki alt kategoriye geç
+            current_index = self.alt_combo.currentIndex()
+            if current_index < self.alt_combo.count() - 1:
+                self.alt_combo.setCurrentIndex(current_index + 1)
+            elif self.ana_combo.currentIndex() < self.ana_combo.count() - 1:
+                # Eğer son alt kategorideysek ve başka ana kategori varsa
+                self.ana_combo.setCurrentIndex(self.ana_combo.currentIndex() + 1)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
