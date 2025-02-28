@@ -15,6 +15,7 @@ class OcakParcalariUygulamasi(QMainWindow):
         self.setGeometry(100, 100, 1800, 800)
         
         self.parca_verileri = ParcaVerileri()
+        self.secili_parcalar = {}  # {alt_kategori: {"parca_adi": str, "fiyat": float}}
         self.db = DatabaseConnection(
             server=r".\SQLEXPRESS",
             database="MALZEME_LIST",
@@ -142,7 +143,6 @@ class OcakParcalariUygulamasi(QMainWindow):
         # Seçilen alt kategoriye göre parçaları SQL'den çek ve radio buton olarak ekle
         secilen_kategori = self.alt_combo.currentText()
         try:
-            # ParcaVerileri sınıfından parçaları al
             parca_detaylari = self.parca_verileri.get_parcalar(secilen_kategori)
             
             if parca_detaylari and "parcalar" in parca_detaylari:
@@ -160,15 +160,21 @@ class OcakParcalariUygulamasi(QMainWindow):
                     self.radio_group.addButton(radio)
                     self.radio_layout.addWidget(radio, 0, Qt.AlignTop)
                     
-                # Maliyet raporunu güncelle
-                self.maliyet_raporu.guncelle_rapor(
-                    {secilen_kategori: parca_detaylari},
-                    [secilen_kategori]
-                )
+                    # Eğer bu alt kategori için daha önce seçim yapıldıysa, o seçimi işaretle
+                    if secilen_kategori in self.secili_parcalar and self.secili_parcalar[secilen_kategori]["parca_adi"] == parca:
+                        radio.setChecked(True)
                 
-                # Görseli güncelle (eğer varsa)
-                gorsel_yolu = f"modeller/{parca_detaylari['gorsel_klasor']}/{secilen_kategori.lower().replace(' ', '_')}.png"
-                self.gorsel_gosterici.goster_gorsel(gorsel_yolu)
+                # Görseli güncelle
+                if secilen_kategori in self.secili_parcalar:
+                    parca_adi = self.secili_parcalar[secilen_kategori]["parca_adi"]
+                    gorsel_yolu = f"modeller/{parca_detaylari['gorsel_klasor']}/{parca_adi.lower().replace(' ', '_')}.png"
+                    self.gorsel_gosterici.goster_gorsel(gorsel_yolu)
+                else:
+                    gorsel_yolu = f"modeller/{parca_detaylari['gorsel_klasor']}/{secilen_kategori.lower().replace(' ', '_')}.png"
+                    self.gorsel_gosterici.goster_gorsel(gorsel_yolu)
+                
+                # Maliyet raporunu güncelle
+                self.maliyet_raporu.guncelle_parcalar(self.secili_parcalar)
             else:
                 # Eğer parça bulunamazsa bilgi mesajı göster
                 radio = QRadioButton("Bu kategoride parça bulunamadı")
@@ -185,17 +191,21 @@ class OcakParcalariUygulamasi(QMainWindow):
     def parca_secildi(self, button):
         secilen_kategori = self.alt_combo.currentText()
         if secilen_kategori in self.parca_verileri.parca_detaylari:
-            # Seçilen parçaya göre görseli ve maliyeti güncelle
             parca_adi = button.text()
             gorsel_yolu = f"modeller/{self.parca_verileri.parca_detaylari[secilen_kategori]['gorsel_klasor']}/{parca_adi.lower().replace(' ', '_')}.png"
             self.gorsel_gosterici.goster_gorsel(gorsel_yolu)
             
-            # Maliyet raporunu seçilen parçaya göre güncelle
-            self.maliyet_raporu.guncelle_rapor(
-                self.parca_verileri.parca_detaylari,
-                [secilen_kategori],
-                parca_adi
-            )
+            # Fiyatı al (parantez içindeki değeri)
+            fiyat = float(parca_adi.split('(')[1].split('TL')[0].strip())
+            
+            # Seçilen parçayı kaydet
+            self.secili_parcalar[secilen_kategori] = {
+                "parca_adi": parca_adi,
+                "fiyat": fiyat
+            }
+            
+            # Maliyet raporunu güncelle
+            self.maliyet_raporu.guncelle_parcalar(self.secili_parcalar)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
