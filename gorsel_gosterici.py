@@ -16,6 +16,53 @@ class GorselGosterici(QFrame):
         self.setup_ui()
         self.setup_toaster_model()
         
+        # Performans iyileştirmesi için fare olaylarını bağla
+        self.canvas.mpl_connect('button_press_event', self.on_mouse_press)
+        self.canvas.mpl_connect('button_release_event', self.on_mouse_release)
+        self.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+        self.mouse_pressed = False
+        self.last_x = 0
+        self.last_y = 0
+        
+    def on_mouse_press(self, event):
+        """Fare basıldığında çağrılır"""
+        if event.button == 1:  # Sol fare tuşu
+            self.mouse_pressed = True
+            self.last_x = event.xdata if event.xdata else 0
+            self.last_y = event.ydata if event.ydata else 0
+    
+    def on_mouse_release(self, event):
+        """Fare bırakıldığında çağrılır"""
+        if event.button == 1:  # Sol fare tuşu
+            self.mouse_pressed = False
+    
+    def on_mouse_move(self, event):
+        """Fare hareket ettiğinde çağrılır"""
+        if self.mouse_pressed and event.xdata and event.ydata:
+            # Fare hareketine göre görünümü döndür
+            dx = event.xdata - self.last_x
+            dy = event.ydata - self.last_y
+            
+            # Mevcut görünüm açılarını al
+            current_elev, current_azim = self.ax.elev, self.ax.azim
+            
+            # Yeni açıları hesapla (daha hassas hareket için katsayıları ayarla)
+            new_azim = current_azim + dx * 2.0
+            new_elev = current_elev - dy * 2.0
+            
+            # Açıları sınırla
+            new_elev = max(-90, min(90, new_elev))
+            
+            # Görünümü güncelle
+            self.ax.view_init(elev=new_elev, azim=new_azim)
+            
+            # Son konumu güncelle
+            self.last_x = event.xdata
+            self.last_y = event.ydata
+            
+            # Sadece ekranı yenile, tüm çizimi yeniden yapma
+            self.canvas.draw_idle()
+        
     def setup_ui(self):
         layout = QVBoxLayout(self)
         
@@ -43,6 +90,28 @@ class GorselGosterici(QFrame):
         self.ax.set_ylabel('Y')
         self.ax.set_zlabel('Z')
         
+        # Performans iyileştirmeleri
+        self.figure.tight_layout()
+        self.ax.set_box_aspect([1, 1, 1.2])  # Daha iyi oran
+        
+        # Görünüm kalitesini artır
+        self.ax.set_facecolor('#f0f0f0')  # Arka plan rengi
+        
+        # Performans için eksen çizgilerini basitleştir
+        self.ax.xaxis.pane.fill = False
+        self.ax.yaxis.pane.fill = False
+        self.ax.zaxis.pane.fill = False
+        self.ax.xaxis.pane.set_edgecolor('lightgrey')
+        self.ax.yaxis.pane.set_edgecolor('lightgrey')
+        self.ax.zaxis.pane.set_edgecolor('lightgrey')
+        self.ax.grid(False)  # Izgara çizgilerini kapat
+        
+        # Fare ile döndürme talimatı
+        mouse_label = QLabel("Modeli döndürmek için fareyi sürükleyin")
+        mouse_label.setAlignment(Qt.AlignCenter)
+        mouse_label.setStyleSheet("font-style: italic; color: #666;")
+        layout.addWidget(mouse_label)
+        
         # Add view control buttons
         view_layout = QHBoxLayout()
         
@@ -69,7 +138,10 @@ class GorselGosterici(QFrame):
         layout.addLayout(view_layout)
         
     def change_view(self, elev, azim):
+        # Görünümü değiştir
         self.ax.view_init(elev=elev, azim=azim)
+        
+        # Görünümü yenile - daha hızlı yenileme için
         self.canvas.draw_idle()
         
     def setup_toaster_model(self):
@@ -296,41 +368,71 @@ class GorselGosterici(QFrame):
         # Create collections to store the 3D polygons
         self.collections = {}
         
+        # Tüm parçaları önceden oluştur ama görünmez yap
+        self._create_all_parts()
+        
+    def _create_all_parts(self):
+        """Tüm parçaları önceden oluştur ama görünmez yap"""
+        # Performans için önce tüm parçaları temizle
+        for collection in self.collections.values():
+            if collection in self.ax.collections:
+                collection.remove()
+        self.collections = {}
+        
+        # Parçaları oluştur
+        for part_name, part_info in self.parts.items():
+            vertices = part_info['vertices']
+            faces = part_info['faces']
+            polygons = []
+            
+            for face in faces:
+                polygon = [vertices[i] for i in face]
+                polygons.append(polygon)
+            
+            # Daha iyi görünüm için ayarlar
+            collection = Poly3DCollection(
+                polygons, 
+                alpha=0.95,  # Biraz şeffaflık
+                linewidths=0.5,  # İnce kenarlar
+                edgecolors='black',
+                antialiaseds=True  # Kenarları yumuşat
+            )
+            collection.set_facecolor(part_info['color'])
+            collection.set_visible(False)
+            
+            # Performans için z-order ayarı
+            collection.set_sort_zpos(0)  # Z-sıralama için sabit değer
+            
+            self.ax.add_collection3d(collection)
+            self.collections[part_name] = collection
+        
+        # Görünümü yenile
+        self.canvas.draw_idle()
+        
     def goster_gorsel(self, gorsel_yolu=None):
         # This method is kept for compatibility with the original interface
         # but now it doesn't use image files
         pass
         
     def update_part_visibility(self, part_name, visible=True):
+        """Parçanın görünürlüğünü güncelle"""
         if part_name in self.parts:
             self.parts[part_name]['visible'] = visible
             
-            # Update the visibility of the corresponding collection
             if part_name in self.collections:
                 self.collections[part_name].set_visible(visible)
-            else:
-                # Create the collection if it doesn't exist
-                vertices = self.parts[part_name]['vertices']
-                faces = self.parts[part_name]['faces']
-                polygons = []
-                
-                for face in faces:
-                    polygon = [vertices[i] for i in face]
-                    polygons.append(polygon)
-                
-                collection = Poly3DCollection(polygons, alpha=0.9)
-                collection.set_facecolor(self.parts[part_name]['color'])
-                collection.set_edgecolor('black')
-                collection.set_visible(visible)
-                
-                self.ax.add_collection3d(collection)
-                self.collections[part_name] = collection
             
-            self.canvas.draw_idle()
+        self.canvas.draw_idle()
     
     def update_model_from_selection(self, secili_parcalar):
         # Update the model based on selected parts
         self.secili_parcalar = secili_parcalar
+        
+        # Önce tüm parçaları gizle
+        for part_name in self.parts:
+            if part_name in self.collections:
+                self.collections[part_name].set_visible(False)
+            self.parts[part_name]['visible'] = False
         
         # Map selected parts to 3D model parts
         for alt_kategori, parca_bilgisi in secili_parcalar.items():
@@ -340,27 +442,28 @@ class GorselGosterici(QFrame):
             base_part_name = parca_adi.split('(')[0].strip()
             
             # Try to find a matching part in our 3D model
-            matching_part = None
             for part_name in self.parts:
                 if part_name.lower() in alt_kategori.lower() or alt_kategori.lower() in part_name.lower():
-                    matching_part = part_name
-                    break
+                    self.parts[part_name]['visible'] = True
+                    if part_name in self.collections:
+                        self.collections[part_name].set_visible(True)
             
-            if matching_part:
-                self.update_part_visibility(matching_part, True)
-                
-                # Special case for bread
-                if "ekmek" in alt_kategori.lower() or "ekmek" in parca_adi.lower():
-                    self.update_part_visibility("Ekmek_Sol", True)
-                    self.update_part_visibility("Ekmek_Sag", True)
+            # Special case for bread
+            if "ekmek" in alt_kategori.lower() or "ekmek" in parca_adi.lower():
+                for bread_part in ["Ekmek_Sol", "Ekmek_Sag"]:
+                    self.parts[bread_part]['visible'] = True
+                    if bread_part in self.collections:
+                        self.collections[bread_part].set_visible(True)
         
+        # Görünümü yenile
         self.canvas.draw_idle()
         
     def reset_model(self):
-        # Hide all parts
+        # Tüm parçaları gizle
         for part_name in self.parts:
             if part_name in self.collections:
                 self.collections[part_name].set_visible(False)
-                self.parts[part_name]['visible'] = False
+            self.parts[part_name]['visible'] = False
         
+        # Görünümü yenile
         self.canvas.draw_idle() 
