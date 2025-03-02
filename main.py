@@ -152,6 +152,7 @@ class TostMakinesiUygulamasi(QMainWindow):
         
         # Maliyet raporu
         self.maliyet_raporu = MaliyetRaporu()
+        self.maliyet_raporu.set_main_window(self)  # Ana pencere referansını ayarla
         self.tab_widget.addTab(self.maliyet_raporu, "Maliyet Raporu")
         
         # Kayıtlı raporlar sekmesi

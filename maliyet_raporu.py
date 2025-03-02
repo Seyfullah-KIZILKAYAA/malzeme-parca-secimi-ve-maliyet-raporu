@@ -69,6 +69,9 @@ class MaliyetRaporu(QWidget):
             "Degistirilebilir_Plakalar": 2
         }
         
+        # Ana pencere referansını saklamak için
+        self.main_window = None
+        
     def setup_ui(self):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(10, 15, 10, 15)  # Kenar boşluklarını artır
@@ -103,6 +106,9 @@ class MaliyetRaporu(QWidget):
         """)
         self.tablo.setMinimumHeight(250)  # Tablo yüksekliğini artır
         self.tablo.setMinimumWidth(600)   # Tablo minimum genişliğini artır
+        
+        # Çift tıklama sinyalini bağla
+        self.tablo.itemDoubleClicked.connect(self.parca_secimi_degistir)
         
         # Sütun genişliklerini ayarla
         header = self.tablo.horizontalHeader()
@@ -360,4 +366,52 @@ class MaliyetRaporu(QWidget):
             
             # Rapor adı ve tarih bilgisini ekle
             worksheet.cell(row=son_satir+2, column=1, value=f"Rapor Adı: {rapor_adi}")
-            worksheet.cell(row=son_satir+3, column=1, value=f"Oluşturma Tarihi: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}") 
+            worksheet.cell(row=son_satir+3, column=1, value=f"Oluşturma Tarihi: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    
+    def parca_secimi_degistir(self, item):
+        """Tabloda çift tıklanan parçanın seçimini değiştirmek için"""
+        if not self.main_window:
+            print("Ana pencere referansı bulunamadı!")
+            return
+            
+        try:
+            # Tıklanan satırı al
+            row = item.row()
+            
+            # Alt kategoriyi al
+            alt_kategori_item = self.tablo.item(row, 0)
+            if not alt_kategori_item:
+                print("Alt kategori bulunamadı!")
+                return
+                
+            alt_kategori = alt_kategori_item.text()
+            
+            # Ana kategoriyi bul
+            for ana_index, alt_kategoriler in self.main_window.parca_verileri.alt_kategoriler.items():
+                if alt_kategori in alt_kategoriler:
+                    # Önce ana kategoriyi seç
+                    self.main_window.ana_combo.setCurrentIndex(ana_index)
+                    
+                    # Sonra alt kategoriyi seç
+                    alt_index = self.main_window.alt_combo.findText(alt_kategori)
+                    if alt_index != -1:
+                        self.main_window.alt_combo.setCurrentIndex(alt_index)
+                        
+                        # Seçilen parçayı bul ve seç
+                        parca_item = self.tablo.item(row, 1)
+                        if parca_item:
+                            secilen_parca = parca_item.text()
+                            for button in self.main_window.radio_group.buttons():
+                                if button.text() == secilen_parca:
+                                    button.setChecked(True)
+                                    button.clicked.emit()  # Parça seçim olayını tetikle
+                                    break
+                    break
+                    
+        except Exception as e:
+            print(f"Parça seçimi değiştirilirken hata oluştu: {str(e)}")
+            return
+    
+    def set_main_window(self, main_window):
+        """Ana pencere referansını ayarla"""
+        self.main_window = main_window 
