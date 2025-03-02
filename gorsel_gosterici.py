@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QWidget, QPushButton, QHBoxLayout, QLabel
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -13,6 +13,14 @@ class GorselGosterici(QFrame):
         super().__init__(parent)
         self.setFrameStyle(QFrame.StyledPanel)
         self.secili_parcalar = {}
+        self.onceki_parcalar = {}  # Önceki seçili parçaları saklamak için
+        self.yanip_sonen_parcalar = set()  # Yanıp sönen parçaları takip etmek için
+        self.flash_count = 0  # Yanıp sönme sayacı
+        
+        # Yanıp sönme için timer
+        self.flash_timer = QTimer()
+        self.flash_timer.timeout.connect(self.flash_effect)
+        
         self.setup_ui()
         self.setup_toaster_model()
         
@@ -425,45 +433,141 @@ class GorselGosterici(QFrame):
         self.canvas.draw_idle()
     
     def update_model_from_selection(self, secili_parcalar):
+        # Değişen parçaları belirle
+        degisen_parcalar = set()
+        for alt_kategori, parca_bilgisi in secili_parcalar.items():
+            if alt_kategori not in self.onceki_parcalar or self.onceki_parcalar[alt_kategori] != parca_bilgisi:
+                degisen_parcalar.add(alt_kategori)
+        
         # Update the model based on selected parts
-        self.secili_parcalar = secili_parcalar
+        self.secili_parcalar = secili_parcalar.copy()
         
         # Önce tüm parçaları gizle
         for part_name in self.parts:
             if part_name in self.collections:
                 self.collections[part_name].set_visible(False)
+                self.collections[part_name].set_sort_zpos(0)
             self.parts[part_name]['visible'] = False
+        
+        # Yanıp sönecek parçaları belirle
+        self.yanip_sonen_parcalar.clear()
         
         # Map selected parts to 3D model parts
         for alt_kategori, parca_bilgisi in secili_parcalar.items():
             parca_adi = parca_bilgisi["parca_adi"]
             
-            # Extract the base part name from the part name (remove price info)
-            base_part_name = parca_adi.split('(')[0].strip()
+            # Alt kategori ve parça adını küçük harfe çevir
+            alt_kategori_lower = alt_kategori.lower().replace("_", " ")
+            parca_adi_lower = parca_adi.split('(')[0].strip().lower()
             
             # Try to find a matching part in our 3D model
             for part_name in self.parts:
-                if part_name.lower() in alt_kategori.lower() or alt_kategori.lower() in part_name.lower():
+                part_name_lower = part_name.lower().replace("_", " ")
+                
+                # Eğer parça adı alt kategori veya seçilen parça adı ile eşleşiyorsa
+                if (part_name_lower in alt_kategori_lower or 
+                    alt_kategori_lower in part_name_lower or
+                    part_name_lower in parca_adi_lower or
+                    parca_adi_lower in part_name_lower):
+                    
                     self.parts[part_name]['visible'] = True
                     if part_name in self.collections:
-                        self.collections[part_name].set_visible(True)
+                        collection = self.collections[part_name]
+                        collection.set_visible(True)
+                        # Parçanın orijinal rengini ayarla
+                        collection.set_facecolor(self.parts[part_name]['color'])
+                        # Eğer bu parça değiştiyse, yanıp sönme listesine ekle
+                        if alt_kategori in degisen_parcalar:
+                            self.yanip_sonen_parcalar.add(part_name)
             
             # Special case for bread
-            if "ekmek" in alt_kategori.lower() or "ekmek" in parca_adi.lower():
+            if "ekmek" in alt_kategori_lower or "ekmek" in parca_adi_lower:
                 for bread_part in ["Ekmek_Sol", "Ekmek_Sag"]:
                     self.parts[bread_part]['visible'] = True
                     if bread_part in self.collections:
-                        self.collections[bread_part].set_visible(True)
+                        collection = self.collections[bread_part]
+                        collection.set_visible(True)
+                        # Ekmek parçalarının orijinal rengini ayarla
+                        collection.set_facecolor(self.parts[bread_part]['color'])
+                        if alt_kategori in degisen_parcalar:
+                            self.yanip_sonen_parcalar.add(bread_part)
+        
+        # Yanıp sönme efektini başlat
+        if self.yanip_sonen_parcalar:
+            self.flash_count = 0
+            if hasattr(self, 'flash_timer'):
+                self.flash_timer.stop()  # Varolan timer'ı durdur
+            self.flash_timer = QTimer()
+            self.flash_timer.timeout.connect(self.flash_effect)
+            self.flash_timer.start(500)  # Her 500ms'de bir yanıp sönme
+            # İlk yanıp sönmeyi hemen başlat
+            self.flash_effect()
+        
+        # Önceki parçaları güncelle
+        self.onceki_parcalar = secili_parcalar.copy()
         
         # Görünümü yenile
-        self.canvas.draw_idle()
+        self.figure.canvas.draw()
+        self.figure.canvas.flush_events()
+    
+    def flash_effect(self):
+        """Yanıp sönme efektini uygula"""
+        self.flash_count += 1
         
+        # Yanıp sönen parçaların rengini değiştir
+        for part_name in self.yanip_sonen_parcalar:
+            if part_name in self.collections:
+                collection = self.collections[part_name]
+                if self.flash_count % 2 == 0:
+                    # Normal renk
+                    collection.set_facecolor(self.parts[part_name]['color'])
+                else:
+                    # Altın sarısı renk
+                    collection.set_facecolor('#FFD700')  # Altın sarısı
+                
+                # Görünürlüğü zorla
+                collection.set_visible(True)
+                
+                # Z-order'ı güncelle
+                collection.set_sort_zpos(10 if self.flash_count % 2 == 1 else 0)
+        
+        # Axes'i yenile
+        self.ax.set_title(f"Yanıp Sönme: {self.flash_count//2 + 1}/6", pad=10)
+        
+        # Görünümü yenile
+        self.figure.canvas.draw()
+        self.figure.canvas.flush_events()
+        
+        # 6 kez yanıp söndükten sonra durdur (12 renk değişimi)
+        if self.flash_count >= 12:
+            self.flash_timer.stop()
+            # Son olarak normal renklere döndür
+            for part_name in self.yanip_sonen_parcalar:
+                if part_name in self.collections:
+                    self.collections[part_name].set_facecolor(self.parts[part_name]['color'])
+                    self.collections[part_name].set_visible(True)
+                    self.collections[part_name].set_sort_zpos(0)
+            
+            self.ax.set_title("")
+            self.figure.canvas.draw()
+            self.figure.canvas.flush_events()
+    
     def reset_model(self):
+        # Timer'ı durdur
+        self.flash_timer.stop()
+        
         # Tüm parçaları gizle
         for part_name in self.parts:
             if part_name in self.collections:
                 self.collections[part_name].set_visible(False)
+                self.collections[part_name].set_facecolor(self.parts[part_name]['color'])
             self.parts[part_name]['visible'] = False
+        
+        # Yanıp sönen parçaları temizle
+        self.yanip_sonen_parcalar.clear()
+        
+        # Önceki parçaları temizle
+        self.onceki_parcalar.clear()
         
         # Görünümü yenile
         self.canvas.draw_idle() 
