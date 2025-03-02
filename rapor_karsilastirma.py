@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                           QLabel, QMessageBox, QDialog, QScrollArea, QFrame)
-from PyQt5.QtCore import Qt
+                           QLabel, QMessageBox, QDialog, QScrollArea, QFrame, QFileDialog)
+from PyQt5.QtCore import Qt, QMarginsF, QSizeF, QRectF
+from PyQt5.QtGui import QPainter, QPdfWriter, QPageLayout, QPageSize, QFont
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -24,6 +25,9 @@ class RaporKarsilastirma(QDialog):
         # Stil ayarları
         plt.style.use('bmh')
         sns.set_style("whitegrid")
+        
+        # Widget referanslarını tutmak için
+        self.content_widget = None
         
         self.setup_ui()
         
@@ -73,9 +77,9 @@ class RaporKarsilastirma(QDialog):
         """)
         
         # İçerik widget'ı
-        content_widget = QWidget()
-        content_widget.setStyleSheet("background-color: white;")
-        content_layout = QVBoxLayout(content_widget)
+        self.content_widget = QWidget()
+        self.content_widget.setStyleSheet("background-color: white;")
+        content_layout = QVBoxLayout(self.content_widget)
         content_layout.setSpacing(30)
         content_layout.setContentsMargins(20, 20, 20, 20)
         
@@ -106,8 +110,8 @@ class RaporKarsilastirma(QDialog):
                 raise ValueError("Bir veya her iki rapor boş veri içeriyor.")
             
             # Rapor isimlerini al
-            rapor1_adi = os.path.basename(self.rapor1_yolu).split('_')[0]
-            rapor2_adi = os.path.basename(self.rapor2_yolu).split('_')[0]
+            rapor1_adi = os.path.splitext(os.path.basename(self.rapor1_yolu))[0]
+            rapor2_adi = os.path.splitext(os.path.basename(self.rapor2_yolu))[0]
             
             # Özet bilgiler için frame
             ozet_frame = QFrame()
@@ -130,15 +134,18 @@ class RaporKarsilastirma(QDialog):
             toplam2 = df2['Toplam Fiyat (TL)'].sum()
             fark = toplam2 - toplam1
             
-            ozet_text = QLabel(f"""
+            ozet_text = QLabel()
+            ozet_text.setText(f"""
             {rapor1_adi}: {toplam1:,.2f} TL
             {rapor2_adi}: {toplam2:,.2f} TL
             Fark: {abs(fark):,.2f} TL ({rapor2_adi} {'daha pahalı' if fark > 0 else 'daha ucuz'})
             """)
             ozet_text.setStyleSheet("""
-                font-family: monospace;
-                font-size: 14px;
-                padding: 10px;
+                QLabel {
+                    font-family: 'Courier New';
+                    font-size: 14px;
+                    padding: 10px;
+                }
             """)
             ozet_layout.addWidget(ozet_text)
             
@@ -205,10 +212,10 @@ class RaporKarsilastirma(QDialog):
             """)
             content_layout.addWidget(error_label)
         
-        scroll.setWidget(content_widget)
+        scroll.setWidget(self.content_widget)
         main_layout.addWidget(scroll)
         
-        # Kapat butonu için frame
+        # Butonlar için frame
         button_frame = QFrame()
         button_frame.setStyleSheet("""
             QFrame {
@@ -218,6 +225,25 @@ class RaporKarsilastirma(QDialog):
         """)
         button_layout = QHBoxLayout(button_frame)
         button_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # PDF Kaydet butonu
+        pdf_btn = QPushButton("PDF Olarak Kaydet")
+        pdf_btn.setFixedWidth(150)
+        pdf_btn.clicked.connect(self.export_to_pdf)
+        pdf_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border-radius: 4px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+        """)
+        button_layout.addWidget(pdf_btn)
         
         # Kapat butonu
         kapat_btn = QPushButton("Kapat")
@@ -236,7 +262,7 @@ class RaporKarsilastirma(QDialog):
                 background-color: #c82333;
             }
         """)
-        button_layout.addWidget(kapat_btn, alignment=Qt.AlignRight)
+        button_layout.addWidget(kapat_btn)
         
         main_layout.addWidget(button_frame)
 
@@ -288,12 +314,14 @@ class RaporKarsilastirma(QDialog):
                     # Kategori başlığı
                     baslik = QLabel(f"{kategori} Karşılaştırması")
                     baslik.setStyleSheet("""
-                        font-size: 14px;
-                        font-weight: bold;
-                        color: #495057;
-                        padding: 5px;
-                        background-color: white;
-                        border-radius: 3px;
+                        QLabel {
+                            font-size: 14px;
+                            font-weight: bold;
+                            color: #495057;
+                            padding: 5px;
+                            background-color: white;
+                            border-radius: 3px;
+                        }
                     """)
                     cat_layout.addWidget(baslik)
                     
@@ -306,7 +334,14 @@ class RaporKarsilastirma(QDialog):
                     
                     # Grafik oluştur
                     plt.close('all')
-                    fig, ax = plt.subplots(figsize=(8, 3))
+                    fig, ax = plt.subplots(figsize=(16, 8))  # Grafik boyutunu artır
+                    
+                    # Font boyutlarını artır
+                    plt.rcParams['font.size'] = 16
+                    plt.rcParams['axes.titlesize'] = 18
+                    plt.rcParams['axes.labelsize'] = 16
+                    plt.rcParams['xtick.labelsize'] = 14
+                    plt.rcParams['ytick.labelsize'] = 14
                     
                     # Çubuk grafik
                     x = np.arange(2)
@@ -321,6 +356,10 @@ class RaporKarsilastirma(QDialog):
                     ax.yaxis.grid(True, linestyle='--', alpha=0.7)
                     ax.set_axisbelow(True)
                     
+                    # Y ekseninde daha fazla boşluk bırak
+                    ylim = ax.get_ylim()
+                    ax.set_ylim(ylim[0], ylim[1] * 1.2)  # Y eksenini %20 artır
+                    
                     # Değerleri çubukların üzerine yaz
                     def autolabel(rect, value):
                         try:
@@ -330,7 +369,7 @@ class RaporKarsilastirma(QDialog):
                                       xytext=(0, 3),
                                       textcoords="offset points",
                                       ha='center', va='bottom',
-                                      fontsize=9,
+                                      fontsize=12,
                                       weight='bold')
                         except Exception:
                             pass
@@ -343,35 +382,59 @@ class RaporKarsilastirma(QDialog):
                         try:
                             fark_yuzde = ((deger2 - deger1) / deger1) * 100
                             fark_text = f"Fark: %{abs(fark_yuzde):.1f} {'artış' if fark_yuzde > 0 else 'azalış'}"
-                            ax.text(0.5, 1.05, fark_text,
+                            ax.text(0.5, 0.85, fark_text,  # Pozisyonu aşağı çek
                                   ha='center', va='bottom',
                                   transform=ax.transAxes,
-                                  fontsize=9,
-                                  color='#dc3545' if fark_yuzde > 0 else '#28a745')
+                                  fontsize=12,
+                                  weight='bold',
+                                  color='#dc3545' if fark_yuzde > 0 else '#28a745',
+                                  bbox=dict(facecolor='white', 
+                                          edgecolor='gray', 
+                                          alpha=0.9,
+                                          boxstyle='round,pad=0.5',
+                                          mutation_scale=1.2))  # Kutu boyutunu artır
                         except Exception:
                             pass
+                    
+                    # Rapor isimlerini daha belirgin yap
+                    rapor1_adi_kisa = os.path.splitext(os.path.basename(self.rapor1_yolu))[0]
+                    rapor2_adi_kisa = os.path.splitext(os.path.basename(self.rapor2_yolu))[0]
+                    ax.set_xticklabels([rapor1_adi_kisa, rapor2_adi_kisa], fontsize=14, weight='bold')
+                    
+                    # Göstergeyi (legend) daha belirgin yap
+                    ax.legend(loc='upper right', fontsize=12)
                     
                     plt.tight_layout()
                     
                     # Canvas oluştur ve ekle
                     canvas = FigureCanvas(fig)
-                    canvas.setMinimumHeight(200)
+                    canvas.setMinimumHeight(400)  # Canvas yüksekliğini artır
                     cat_layout.addWidget(canvas)
                     
                     # Değerleri tablo olarak göster
-                    degerler_text = QLabel(f"""
+                    degerler_text = QLabel()
+                    degerler_text.setText(f"""
                     {rapor1_adi}: {deger1:,.2f} TL
                     {rapor2_adi}: {deger2:,.2f} TL
                     Fark: {abs(deger2 - deger1):,.2f} TL
                     """)
                     degerler_text.setStyleSheet("""
-                        font-family: monospace;
-                        font-size: 12px;
-                        padding: 5px;
-                        background-color: white;
-                        border-radius: 3px;
+                        QLabel {
+                            font-family: 'Courier New';
+                            font-size: 14px;
+                            font-weight: bold;
+                            padding: 10px;
+                            background-color: white;
+                            border: 1px solid #e9ecef;
+                            border-radius: 5px;
+                            margin: 5px;
+                            margin-bottom: 20px;
+                        }
                     """)
                     cat_layout.addWidget(degerler_text)
+                    
+                    # Frame'in alt boşluğunu artır
+                    cat_frame.setContentsMargins(10, 10, 10, 30)  # Alt marjini artır
                     
                     main_layout.addWidget(cat_frame)
                     
@@ -383,6 +446,10 @@ class RaporKarsilastirma(QDialog):
                     main_layout.addWidget(error_label)
             
             layout.addWidget(main_frame)
+            
+            # Ana frame için spacing ve marjin ayarları
+            main_frame.setContentsMargins(10, 10, 10, 30)  # Alt marjini artır
+            main_layout.setSpacing(40)  # Frame'ler arası boşluğu artır
             
         except Exception as e:
             raise Exception(f"Kategori karşılaştırması oluşturulurken hata: {str(e)}")
@@ -431,7 +498,14 @@ class RaporKarsilastirma(QDialog):
             
             # Grafik oluştur
             plt.close('all')
-            fig, ax = plt.subplots(figsize=(10, 5))
+            fig, ax = plt.subplots(figsize=(12, 8))  # Daha makul boyut
+            
+            # Font boyutlarını artır
+            plt.rcParams['font.size'] = 16
+            plt.rcParams['axes.titlesize'] = 18
+            plt.rcParams['axes.labelsize'] = 16
+            plt.rcParams['xtick.labelsize'] = 14
+            plt.rcParams['ytick.labelsize'] = 14
             
             # Değerleri float'a çevir
             values1 = top_diff['Toplam Fiyat (TL)_1'].astype(float)
@@ -510,19 +584,22 @@ class RaporKarsilastirma(QDialog):
                 fiyat2 = row['Toplam Fiyat (TL)_2']
                 fark = abs(fiyat2 - fiyat1)
                 
-                info_text = QLabel(f"""
+                info_text = QLabel()
+                info_text.setText(f"""
                 Parça: {parca_adi}
                 {rapor1_adi}: {fiyat1:,.2f} TL
                 {rapor2_adi}: {fiyat2:,.2f} TL
                 Fark: {fark:,.2f} TL
                 """)
                 info_text.setStyleSheet("""
-                    font-family: monospace;
-                    font-size: 12px;
-                    padding: 5px;
-                    background-color: white;
-                    border-radius: 3px;
-                    margin: 2px;
+                    QLabel {
+                        font-family: 'Courier New';
+                        font-size: 12px;
+                        padding: 5px;
+                        background-color: white;
+                        border-radius: 3px;
+                        margin: 2px;
+                    }
                 """)
                 info_layout.addWidget(info_text)
             
@@ -565,7 +642,12 @@ class RaporKarsilastirma(QDialog):
             cat2 = df2_clean.groupby('Alt Kategori')['Toplam Fiyat (TL)'].sum()
             
             plt.close('all')
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))  # Daha makul boyut
+            
+            # Font boyutlarını artır
+            plt.rcParams['font.size'] = 16
+            plt.rcParams['axes.titlesize'] = 18
+            plt.rcParams['axes.labelsize'] = 16
             
             colors = ['#007bff', '#28a745', '#ffc107', '#6f42c1', '#dc3545',
                      '#17a2b8', '#fd7e14', '#20c997', '#6c757d', '#343a40']
@@ -679,4 +761,193 @@ class RaporKarsilastirma(QDialog):
             plt.close(fig)
             
         except Exception as e:
-            raise Exception(f"Pasta grafikleri oluşturulurken hata: {str(e)}") 
+            raise Exception(f"Pasta grafikleri oluşturulurken hata: {str(e)}")
+
+    def export_to_pdf(self):
+        try:
+            # PDF kaydetme yeri seç
+            file_name, _ = QFileDialog.getSaveFileName(
+                self,
+                "PDF Kaydet",
+                os.path.join(os.path.expanduser("~"), "Desktop", "rapor_karsilastirma.pdf"),
+                "PDF Dosyaları (*.pdf)"
+            )
+            
+            if not file_name:
+                return
+            
+            if not file_name.endswith('.pdf'):
+                file_name += '.pdf'
+            
+            # PDF writer oluştur
+            writer = QPdfWriter(file_name)
+            
+            # A4 Dikey boyutu ayarla
+            page_layout = QPageLayout()
+            page_layout.setPageSize(QPageSize(QPageSize.A4))
+            page_layout.setOrientation(QPageLayout.Portrait)  # Dikey mod
+            page_layout.setMargins(QMarginsF(10, 10, 10, 10))  # Normal marj
+            writer.setPageLayout(page_layout)
+            
+            # DPI ayarla
+            writer.setResolution(1200)  # Maksimum çözünürlük
+            
+            # Painter oluştur
+            painter = QPainter()
+            if not painter.begin(writer):
+                raise Exception("PDF oluşturulamadı: Painter başlatılamadı.")
+            
+            try:
+                # İçerik widget'ından tüm frame'leri bul
+                frames = []
+                category_frames = []
+                pie_frame = None
+                summary_frame = None
+                
+                # Ana layout'taki widget'ları kontrol et
+                for i in range(self.content_widget.layout().count()):
+                    widget = self.content_widget.layout().itemAt(i).widget()
+                    if isinstance(widget, QFrame):
+                        # Widget'ın başlığını bul
+                        labels = widget.findChildren(QLabel)
+                        if not labels:
+                            continue
+                        
+                        title = labels[0].text()
+                        
+                        if i == 0:  # Özet frame
+                            summary_frame = widget
+                        elif "Maliyet Dağılımı" in title:  # Pasta grafikleri
+                            pie_frame = widget
+                        elif "Kategori Bazlı" in title:  # Kategori karşılaştırmaları
+                            # Alt frame'leri bul
+                            for child in widget.findChildren(QFrame):
+                                # Sadece doğrudan alt frame'leri al
+                                if child.parent() == widget:
+                                    # Alt frame'in başlığını kontrol et
+                                    child_labels = child.findChildren(QLabel)
+                                    if child_labels and "Karşılaştırması" in child_labels[0].text():
+                                        category_frames.append(child)
+                
+                # Toplam sayfa sayısını hesapla
+                total_pages = 1  # Özet sayfası
+                if category_frames:
+                    total_pages += len(category_frames)  # Her kategori için bir sayfa
+                if pie_frame:
+                    total_pages += 1  # Pasta grafikleri sayfası
+                
+                current_page = 1
+                
+                # Özet sayfası
+                if summary_frame:
+                    frame_size = summary_frame.size()
+                    page_rect = painter.viewport()
+                    
+                    # Sayfanın kullanılabilir alanını hesapla
+                    available_width = page_rect.width() - 40
+                    available_height = page_rect.height() - 60
+                    
+                    # En-boy oranını koruyarak maksimum boyutu hesapla
+                    width_scale = available_width / frame_size.width()
+                    height_scale = available_height / frame_size.height()
+                    scale_factor = min(width_scale, height_scale) * 1.0  # Özet için 1.0x (normal boyut)
+                    
+                    # Ölçeklendirmeyi uygula
+                    painter.resetTransform()
+                    painter.scale(scale_factor, scale_factor)
+                    
+                    # İçeriği sayfanın üst kısmına yerleştir
+                    x_pos = (page_rect.width() - (frame_size.width() * scale_factor)) / (2 * scale_factor)
+                    y_pos = 30
+                    
+                    # Frame'i çiz
+                    painter.translate(x_pos, y_pos)
+                    summary_frame.render(painter)
+                    
+                    # Sayfa numarası
+                    self.draw_page_number(painter, page_rect, current_page, total_pages)
+                    current_page += 1
+                
+                # Kategori karşılaştırma sayfaları - her kategori için yeni sayfa
+                if category_frames:
+                    for frame in category_frames:
+                        if current_page > 1:
+                            writer.newPage()
+                        
+                        frame_size = frame.size()
+                        page_rect = painter.viewport()
+                        
+                        # Sayfanın kullanılabilir alanını hesapla
+                        available_width = page_rect.width() - 40
+                        available_height = page_rect.height() - 60
+                        
+                        # En-boy oranını koruyarak maksimum boyutu hesapla
+                        width_scale = available_width / frame_size.width()
+                        height_scale = available_height / frame_size.height()
+                        scale_factor = min(width_scale, height_scale) * 8.0  # Kategori grafikleri için 800% büyütme
+                        
+                        # Ölçeklendirmeyi uygula
+                        painter.resetTransform()
+                        painter.scale(scale_factor, scale_factor)
+                        
+                        # İçeriği sayfanın üst kısmına yerleştir (daha fazla alan bırakmak için)
+                        x_pos = (page_rect.width() - (frame_size.width() * scale_factor)) / (2 * scale_factor)
+                        y_pos = (page_rect.height() - (frame_size.height() * scale_factor)) / (3 * scale_factor)  # Üst kısma kaydır
+                        
+                        # Frame'i çiz
+                        painter.translate(x_pos, y_pos)
+                        frame.render(painter)
+                        
+                        # Sayfa numarası
+                        self.draw_page_number(painter, page_rect, current_page, total_pages)
+                        current_page += 1
+                
+                # Maliyet dağılımı sayfası
+                if pie_frame:
+                    writer.newPage()
+                    
+                    frame_size = pie_frame.size()
+                    page_rect = painter.viewport()
+                    
+                    # Sayfanın kullanılabilir alanını hesapla
+                    available_width = page_rect.width() - 40
+                    available_height = page_rect.height() - 60
+                    
+                    # En-boy oranını koruyarak maksimum boyutu hesapla
+                    width_scale = available_width / frame_size.width()
+                    height_scale = available_height / frame_size.height()
+                    scale_factor = min(width_scale, height_scale) * 1.5  # Pasta grafikleri için normal boyut
+                    
+                    # Ölçeklendirmeyi uygula
+                    painter.resetTransform()
+                    painter.scale(scale_factor, scale_factor)
+                    
+                    # İçeriği sayfanın ortasına yerleştir
+                    x_pos = (page_rect.width() - (frame_size.width() * scale_factor)) / (2 * scale_factor)
+                    y_pos = (page_rect.height() - (frame_size.height() * scale_factor)) / (2 * scale_factor)
+                    
+                    # Frame'i çiz
+                    painter.translate(x_pos, y_pos)
+                    pie_frame.render(painter)
+                    
+                    # Sayfa numarası
+                    self.draw_page_number(painter, page_rect, current_page, total_pages)
+                
+            finally:
+                painter.end()
+            
+            QMessageBox.information(self, "Başarılı", "Rapor karşılaştırması PDF olarak kaydedildi.")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", f"PDF kaydedilirken hata oluştu: {str(e)}")
+
+    def draw_page_number(self, painter, page_rect, current_page, total_pages):
+        painter.resetTransform()
+        painter.setPen(Qt.black)
+        painter.setFont(QFont('Arial', 10, QFont.Bold))
+        page_number_text = f"Sayfa {current_page} / {total_pages}"
+        painter.drawText(
+            QRectF(0, page_rect.height() - 20, page_rect.width(), 20),
+            Qt.AlignCenter,
+            page_number_text
+        ) 
