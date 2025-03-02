@@ -1,11 +1,12 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, QMessageBox, 
-                            QFileDialog, QListWidget, QHBoxLayout, QDialog, QTableWidget, 
-                            QTableWidgetItem, QHeaderView, QSplitter)
+                            QFileDialog, QInputDialog, QLineEdit, QDialog, QFormLayout, QHBoxLayout,
+                            QListWidget, QListWidgetItem)
 from PyQt5.QtCore import Qt
+from datetime import datetime
 import pandas as pd
 import os
-import sys
-from datetime import datetime
+import shutil
+from rapor_karsilastirma import RaporKarsilastirma
 
 class RaporGoruntule(QWidget):
     def __init__(self):
@@ -23,32 +24,35 @@ class RaporGoruntule(QWidget):
         self.baslik_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #333; padding: 5px;")
         self.layout.addWidget(self.baslik_label)
         
-        # Kayıtlı raporlar listesi
+        # Rapor listesi
         self.liste = QListWidget()
         self.liste.setStyleSheet("""
             QListWidget {
                 font-size: 14px;
-                border: 1px solid #c0c0c0;
+                border: 1px solid #ddd;
                 border-radius: 5px;
                 padding: 5px;
             }
             QListWidget::item {
                 padding: 8px;
-                border-bottom: 1px solid #e0e0e0;
+                border-bottom: 1px solid #eee;
             }
             QListWidget::item:selected {
-                background-color: #e0f0e0;
-                color: #333;
+                background-color: #e0e0e0;
+                color: black;
+            }
+            QListWidget::item:hover {
+                background-color: #f0f0f0;
             }
         """)
-        self.liste.itemDoubleClicked.connect(self.raporu_ac)
+        self.liste.setSelectionMode(QListWidget.ExtendedSelection)  # Çoklu seçime izin ver
         self.layout.addWidget(self.liste)
         
         # Butonlar için yatay düzen
         buton_layout = QHBoxLayout()
         
         # Raporu aç butonu
-        self.ac_button = QPushButton("Seçili Raporu Aç")
+        self.ac_button = QPushButton("Raporu Aç")
         self.ac_button.setStyleSheet("""
             QPushButton {
                 background-color: #4CAF50;
@@ -69,7 +73,7 @@ class RaporGoruntule(QWidget):
         buton_layout.addWidget(self.ac_button)
         
         # Raporu sil butonu
-        self.sil_button = QPushButton("Seçili Raporu Sil")
+        self.sil_button = QPushButton("Raporu Sil")
         self.sil_button.setStyleSheet("""
             QPushButton {
                 background-color: #f44336;
@@ -83,15 +87,15 @@ class RaporGoruntule(QWidget):
                 background-color: #d32f2f;
             }
             QPushButton:pressed {
-                background-color: #b71c1c;
+                background-color: #c62828;
             }
         """)
         self.sil_button.clicked.connect(self.raporu_sil)
         buton_layout.addWidget(self.sil_button)
         
-        # Raporları yenile butonu
-        self.yenile_button = QPushButton("Raporları Yenile")
-        self.yenile_button.setStyleSheet("""
+        # Raporları karşılaştır butonu
+        self.karsilastir_button = QPushButton("Raporları Karşılaştır")
+        self.karsilastir_button.setStyleSheet("""
             QPushButton {
                 background-color: #2196F3;
                 color: white;
@@ -104,7 +108,28 @@ class RaporGoruntule(QWidget):
                 background-color: #1976D2;
             }
             QPushButton:pressed {
-                background-color: #0D47A1;
+                background-color: #1565C0;
+            }
+        """)
+        self.karsilastir_button.clicked.connect(self.raporlari_karsilastir)
+        buton_layout.addWidget(self.karsilastir_button)
+        
+        # Listeyi yenile butonu
+        self.yenile_button = QPushButton("Listeyi Yenile")
+        self.yenile_button.setStyleSheet("""
+            QPushButton {
+                background-color: #9E9E9E;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #757575;
+            }
+            QPushButton:pressed {
+                background-color: #616161;
             }
         """)
         self.yenile_button.clicked.connect(self.raporlari_listele)
@@ -329,4 +354,42 @@ class RaporGoruntule(QWidget):
             self.raporlari_listele()
             
         except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Rapor silinirken bir hata oluştu:\n{str(e)}") 
+            QMessageBox.critical(self, "Hata", f"Rapor silinirken bir hata oluştu:\n{str(e)}")
+    
+    def raporlari_karsilastir(self):
+        """Seçili raporları karşılaştırır."""
+        secili_itemler = self.liste.selectedItems()
+        
+        if len(secili_itemler) != 2:
+            QMessageBox.warning(self, "Uyarı", "Lütfen karşılaştırmak için tam olarak 2 rapor seçin.")
+            return
+        
+        # Seçili raporların dosya yollarını bul
+        dosya_yollari = []
+        for item in secili_itemler:
+            secili_metin = item.text()
+            
+            if secili_metin == "Henüz kaydedilmiş rapor bulunmamaktadır.":
+                return
+            
+            try:
+                rapor_adi = secili_metin.split(' - ')[0]
+                tarih_str = secili_metin.split(' - ')[1]
+                tarih_obj = datetime.strptime(tarih_str, "%d/%m/%Y %H:%M:%S")
+                dosya_tarih = tarih_obj.strftime("%Y%m%d_%H%M%S")
+                dosya_adi = f"{rapor_adi}_{dosya_tarih}.xlsx"
+                dosya_yolu = os.path.join("gecmis", dosya_adi)
+                
+                if not os.path.exists(dosya_yolu):
+                    QMessageBox.warning(self, "Hata", f"Rapor dosyası bulunamadı:\n{dosya_yolu}")
+                    return
+                
+                dosya_yollari.append(dosya_yolu)
+                
+            except Exception as e:
+                QMessageBox.warning(self, "Hata", f"Rapor dosyası işlenirken hata oluştu:\n{str(e)}")
+                return
+        
+        # Karşılaştırma penceresini aç
+        karsilastirma = RaporKarsilastirma(dosya_yollari[0], dosya_yollari[1])
+        karsilastirma.exec_() 
