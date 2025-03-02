@@ -1,12 +1,13 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout,
                             QVBoxLayout, QComboBox, QLabel, QRadioButton, 
-                            QButtonGroup, QFrame, QSplitter, QScrollArea, QPushButton)
+                            QButtonGroup, QFrame, QSplitter, QScrollArea, QPushButton, QTabWidget)
 from PyQt5.QtCore import Qt
 from parca_listesi import ParcaVerileri
 from gorsel_gosterici import GorselGosterici
 from maliyet_raporu import MaliyetRaporu
 from db_connection import DatabaseConnection
+from rapor_goruntule import RaporGoruntule
 
 class TostMakinesiUygulamasi(QMainWindow):
     def __init__(self):
@@ -117,26 +118,47 @@ class TostMakinesiUygulamasi(QMainWindow):
         self.gorsel_gosterici.setMinimumWidth(800)
         layout.addWidget(self.gorsel_gosterici, 2)
         
-        # Sağ panel (maliyet raporu)
+        # Sağ panel (maliyet raporu ve kayıtlı raporlar)
         right_frame = QFrame()
         right_frame.setFrameStyle(QFrame.StyledPanel)
         right_frame.setMinimumWidth(400)
         right_layout = QVBoxLayout(right_frame)
         
-        # Maliyet raporu başlığı
-        maliyet_baslik = QLabel("Maliyet Raporu")
-        maliyet_baslik.setStyleSheet("""
-            font-weight: bold; 
-            font-size: 14px;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border-bottom: 1px solid #ddd;
+        # Tab widget oluştur
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #ddd;
+                background: white;
+                border-radius: 5px;
+            }
+            QTabBar::tab {
+                background: #f0f0f0;
+                border: 1px solid #ddd;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                padding: 8px 12px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background: white;
+                border-bottom: 1px solid white;
+            }
+            QTabBar::tab:hover {
+                background: #e0e0e0;
+            }
         """)
-        right_layout.addWidget(maliyet_baslik)
         
         # Maliyet raporu
         self.maliyet_raporu = MaliyetRaporu()
-        right_layout.addWidget(self.maliyet_raporu)
+        self.tab_widget.addTab(self.maliyet_raporu, "Maliyet Raporu")
+        
+        # Kayıtlı raporlar sekmesi
+        self.rapor_goruntule = RaporGoruntule()
+        self.tab_widget.addTab(self.rapor_goruntule, "Kayıtlı Raporlar")
+        
+        right_layout.addWidget(self.tab_widget)
         
         # Sağ frame'i ana layout'a ekle
         layout.addWidget(right_frame)

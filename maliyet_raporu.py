@@ -1,9 +1,11 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem,
-                            QPushButton, QLabel, QMessageBox, QHeaderView, QFileDialog)
+                            QPushButton, QLabel, QMessageBox, QHeaderView, QFileDialog,
+                            QHBoxLayout, QInputDialog, QLineEdit)
 from PyQt5.QtCore import Qt
 from datetime import datetime
 import pandas as pd
 import os
+import shutil
 
 class MaliyetRaporu(QWidget):
     def __init__(self):
@@ -138,9 +140,12 @@ class MaliyetRaporu(QWidget):
         
         self.layout.addWidget(maliyet_frame)
         
-        # Excel'e kaydetme butonu
-        self.excel_button = QPushButton("Maliyet Raporunu Excel'e Kaydet")
-        self.excel_button.setStyleSheet("""
+        # Rapor kaydetme butonları için yatay düzen
+        buton_layout = QHBoxLayout()
+        
+        # Raporu otomatik kaydet butonu
+        self.kaydet_button = QPushButton("Raporu Kaydet")
+        self.kaydet_button.setStyleSheet("""
             QPushButton {
                 background-color: #4CAF50;
                 color: white;
@@ -156,8 +161,36 @@ class MaliyetRaporu(QWidget):
                 background-color: #3d8b40;
             }
         """)
-        self.excel_button.clicked.connect(self.excel_kaydet)
-        self.layout.addWidget(self.excel_button)
+        self.kaydet_button.clicked.connect(self.raporu_kaydet)
+        buton_layout.addWidget(self.kaydet_button)
+        
+        # Raporu farklı konuma kaydet butonu
+        self.farkli_kaydet_button = QPushButton("Farklı Konuma Kaydet")
+        self.farkli_kaydet_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+        """)
+        self.farkli_kaydet_button.clicked.connect(self.raporu_farkli_kaydet)
+        buton_layout.addWidget(self.farkli_kaydet_button)
+        
+        self.layout.addLayout(buton_layout)
+        
+        # Kayıt yeri bilgisi
+        self.kayit_bilgisi = QLabel("Raporlar 'gecmis' klasörüne kaydedilir.")
+        self.kayit_bilgisi.setStyleSheet("font-style: italic; color: #777; padding: 5px;")
+        self.layout.addWidget(self.kayit_bilgisi)
         
     def guncelle_parcalar(self, secili_parcalar):
         self.tablo.setRowCount(len(secili_parcalar))
@@ -210,134 +243,121 @@ class MaliyetRaporu(QWidget):
         self.tahmini_label.setText(f"Tahmini Maliyet Aralığı: {alt_sinir:.2f} TL - {ust_sinir:.2f} TL")
         
         self.tablo.sortItems(0)  # Alt kategorilere göre sırala
+    
+    def raporu_kaydet(self):
+        """Mevcut raporu otomatik olarak 'gecmis' klasörüne kaydeder."""
+        # Tablodaki verileri kontrol et
+        if self.tablo.rowCount() == 0:
+            QMessageBox.warning(self, "Uyarı", "Kaydedilecek rapor bulunamadı! Önce parça seçimi yapın.")
+            return
         
-    def excel_kaydet(self):
-        """Maliyet raporunu Excel dosyasına kaydeder."""
+        # Geçmiş klasörünü kontrol et ve oluştur
+        gecmis_klasoru = "gecmis"
+        if not os.path.exists(gecmis_klasoru):
+            os.makedirs(gecmis_klasoru)
+        
+        # Dosya adını otomatik olarak tarih ve saat şeklinde oluştur
+        tarih_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dosya_adi = f"Rapor_{tarih_str}.xlsx"
+        dosya_yolu = os.path.join(gecmis_klasoru, dosya_adi)
+        
         try:
-            # Tablodaki verileri al
-            veri = []
-            for row in range(self.tablo.rowCount()):
-                kategori = self.tablo.item(row, 0).text()
-                parca = self.tablo.item(row, 1).text()
-                birim_fiyat_text = self.tablo.item(row, 2).text()
-                toplam_fiyat_text = self.tablo.item(row, 3).text()
-                
-                # Fiyatları sayıya çevir
-                try:
-                    birim_fiyat = float(birim_fiyat_text.replace("TL", "").strip())
-                    toplam_fiyat = float(toplam_fiyat_text.replace("TL", "").strip())
-                except:
-                    birim_fiyat = 0.0
-                    toplam_fiyat = 0.0
-                
-                # Parça adından fiyat bilgisini çıkar
-                parca_adi = parca.split("(")[0].strip()
-                
-                # Parça sayısını belirle
-                parca_sayisi = self.parca_sayilari.get(kategori, 1)
-                
-                veri.append([kategori, parca_adi, birim_fiyat, parca_sayisi, toplam_fiyat])
-            
-            # Veri yoksa uyarı ver
-            if not veri:
-                QMessageBox.warning(self, "Uyarı", "Kaydedilecek veri bulunamadı!")
-                return
-            
-            # Toplam maliyet ve tahmini maliyet aralığı bilgilerini al
-            toplam_maliyet = self.toplam_label.text()
-            tahmini_aralik = self.tahmini_label.text()
-            
-            # Dosya kaydetme diyaloğunu göster
-            dosya_adi, _ = QFileDialog.getSaveFileName(
-                self, 
-                "Excel Dosyasını Kaydet", 
-                os.path.expanduser("~/Desktop/Maliyet_Raporu.xlsx"),
-                "Excel Dosyaları (*.xlsx)"
-            )
-            
-            if not dosya_adi:  # Kullanıcı iptal ettiyse
-                return
-            
-            # Pandas DataFrame oluştur
-            df = pd.DataFrame(veri, columns=["Alt Kategori", "Seçilen Parça", "Birim Fiyat (TL)", "Parça Sayısı", "Toplam Fiyat (TL)"])
-            
-            # Excel dosyasına yaz
-            with pd.ExcelWriter(dosya_adi, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Maliyet Raporu', index=False)
-                
-                # Çalışma kitabını al
-                workbook = writer.book
-                worksheet = writer.sheets['Maliyet Raporu']
-                
-                # Sütun genişliklerini ayarla
-                worksheet.column_dimensions['A'].width = 20  # Alt Kategori
-                worksheet.column_dimensions['B'].width = 40  # Seçilen Parça
-                worksheet.column_dimensions['C'].width = 15  # Birim Fiyat
-                worksheet.column_dimensions['D'].width = 12  # Parça Sayısı
-                worksheet.column_dimensions['E'].width = 18  # Toplam Fiyat
-                
-                # Toplam maliyet ve tahmini maliyet aralığı bilgilerini ekle
-                son_satir = len(veri) + 2
-                worksheet.cell(row=son_satir, column=1, value=toplam_maliyet)
-                worksheet.cell(row=son_satir+1, column=1, value=tahmini_aralik)
-                
-                # Genel toplam maliyeti hesapla ve ekle
-                genel_toplam = sum(item[4] for item in veri)
-                worksheet.cell(row=son_satir+2, column=1, value=f"Genel Toplam Maliyet: {genel_toplam:.2f} TL")
-            
-            QMessageBox.information(self, "Başarılı", f"Maliyet raporu başarıyla kaydedildi:\n{dosya_adi}")
+            # Excel dosyasını oluştur
+            self._excel_olustur(dosya_yolu, f"Rapor_{tarih_str}")
+            QMessageBox.information(self, "Başarılı", f"Rapor başarıyla kaydedildi:\n{dosya_yolu}")
             
         except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Excel dosyası kaydedilirken bir hata oluştu:\n{str(e)}")
-
-    def fiyat_guncelle(self):
+            QMessageBox.critical(self, "Hata", f"Rapor kaydedilirken bir hata oluştu:\n{str(e)}")
+    
+    def raporu_farkli_kaydet(self):
+        """Mevcut raporu kullanıcının seçtiği konuma kaydeder."""
+        # Tablodaki verileri kontrol et
+        if self.tablo.rowCount() == 0:
+            QMessageBox.warning(self, "Uyarı", "Kaydedilecek rapor bulunamadı! Önce parça seçimi yapın.")
+            return
+        
+        # Rapor adını kullanıcıdan al
+        rapor_adi, ok = QInputDialog.getText(self, "Rapor Adı", "Rapor için bir isim girin:", QLineEdit.Normal, "")
+        if not ok or not rapor_adi:
+            return
+        
+        # Dosya adını oluştur (rapor adı + tarih)
+        tarih_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dosya_adi = f"{rapor_adi}_{tarih_str}.xlsx"
+        
+        # Kayıt yerini kullanıcıdan al
+        dosya_yolu, _ = QFileDialog.getSaveFileName(
+            self, "Raporu Kaydet", dosya_adi, "Excel Dosyaları (*.xlsx)"
+        )
+        
+        if not dosya_yolu:
+            return  # Kullanıcı iptal etti
+        
         try:
-            # Parça verilerini yeniden yükle
-            self.parent().parca_verileri = self.parent().parca_verileri.__class__()
-            self.guncelleme_label.setText(
-                f"Son Güncelleme: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-            )
-            QMessageBox.information(self, "Başarılı", "Fiyatlar güncellendi.")
+            # Excel dosyasını oluştur
+            self._excel_olustur(dosya_yolu, rapor_adi)
+            
+            # Ayrıca gecmis klasörüne de bir kopya kaydet
+            gecmis_klasoru = "gecmis"
+            if not os.path.exists(gecmis_klasoru):
+                os.makedirs(gecmis_klasoru)
+            
+            gecmis_dosya_yolu = os.path.join(gecmis_klasoru, os.path.basename(dosya_yolu))
+            
+            # Eğer seçilen konum zaten gecmis klasörü değilse, kopyala
+            if os.path.normpath(os.path.dirname(dosya_yolu)) != os.path.normpath(gecmis_klasoru):
+                shutil.copy2(dosya_yolu, gecmis_dosya_yolu)
+            
+            QMessageBox.information(self, "Başarılı", f"Rapor başarıyla kaydedildi:\n{dosya_yolu}")
+            
         except Exception as e:
-            QMessageBox.warning(self, "Hata", f"Güncelleme hatası: {str(e)}")
-
-    def guncelle_rapor(self, parca_detaylari, secili_parcalar, secili_alt_parca=None):
-        self.tablo.setRowCount(0)
-        toplam_maliyet = 0
+            QMessageBox.critical(self, "Hata", f"Rapor kaydedilirken bir hata oluştu:\n{str(e)}")
+    
+    def _excel_olustur(self, dosya_yolu, rapor_adi):
+        """Excel dosyasını oluşturur."""
+        # Tablodaki verileri al
+        veri = []
+        for row in range(self.tablo.rowCount()):
+            kategori = self.tablo.item(row, 0).text()
+            parca = self.tablo.item(row, 1).text()
+            birim_fiyat_text = self.tablo.item(row, 2).text()
+            toplam_fiyat_text = self.tablo.item(row, 3).text()
+            
+            # Fiyatları sayıya çevir
+            try:
+                birim_fiyat = float(birim_fiyat_text.replace("TL", "").strip())
+                toplam_fiyat = float(toplam_fiyat_text.replace("TL", "").strip())
+            except:
+                birim_fiyat = 0.0
+                toplam_fiyat = 0.0
+            
+            # Parça adından fiyat bilgisini çıkar
+            parca_adi = parca.split("(")[0].strip() if "(" in parca else parca
+            
+            # Parça sayısını belirle
+            parca_sayisi = self.parca_sayilari.get(kategori, 1)
+            
+            veri.append([kategori, parca_adi, birim_fiyat, parca_sayisi, toplam_fiyat])
         
-        for parca, detay in parca_detaylari.items():
-            if parca in secili_parcalar:
-                maliyet = detay.get("maliyet", {})
-                for alt_parca, fiyat in maliyet.items():
-                    if secili_alt_parca is None or alt_parca == secili_alt_parca:
-                        row = self.tablo.rowCount()
-                        self.tablo.insertRow(row)
-                        
-                        # Alt parça
-                        self.tablo.setItem(row, 0, QTableWidgetItem(alt_parca))
-                        
-                        # Toplam fiyat
-                        toplam_fiyat_item = QTableWidgetItem(f"{fiyat:,.2f} TL")
-                        toplam_fiyat_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                        self.tablo.setItem(row, 3, toplam_fiyat_item)
-                        
-                        # Birim fiyat
-                        parca_sayisi = self.parca_sayilari.get(alt_parca, 1)
-                        if parca_sayisi > 0:
-                            birim_fiyat = fiyat / parca_sayisi
-                        else:
-                            birim_fiyat = 0.0
-                        
-                        birim_fiyat_item = QTableWidgetItem(f"{birim_fiyat:,.2f} TL")
-                        birim_fiyat_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                        self.tablo.setItem(row, 2, birim_fiyat_item)
-                        
-                        toplam_maliyet += fiyat
+        # DataFrame oluştur
+        df = pd.DataFrame(veri, columns=["Alt Kategori", "Parça Adı", "Birim Fiyat (TL)", "Adet", "Toplam Fiyat (TL)"])
         
-        # Toplam maliyeti güncelle (gizli)
-        self.toplam_label.setText(f"Toplam Maliyet: {toplam_maliyet:,.2f} TL")
+        # Toplam maliyet hesapla
+        toplam_maliyet = df["Toplam Fiyat (TL)"].sum()
         
-        # Tahmini maliyet aralığını güncelle (toplam maliyetin 500 TL altı ve üstü)
-        alt_sinir = max(0, toplam_maliyet - 500)
-        ust_sinir = toplam_maliyet + 500
-        self.tahmini_label.setText(f"Tahmini Maliyet Aralığı: {alt_sinir:,.2f} TL - {ust_sinir:,.2f} TL") 
+        # Excel dosyasına kaydet
+        with pd.ExcelWriter(dosya_yolu, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name="Maliyet Raporu", index=False)
+            
+            # Toplam maliyet bilgisini ekle
+            workbook = writer.book
+            worksheet = writer.sheets["Maliyet Raporu"]
+            
+            # Toplam satırı ekle
+            son_satir = len(df) + 2  # Başlık satırı ve boş satır için +2
+            worksheet.cell(row=son_satir, column=1, value="TOPLAM")
+            worksheet.cell(row=son_satir, column=5, value=toplam_maliyet)
+            
+            # Rapor adı ve tarih bilgisini ekle
+            worksheet.cell(row=son_satir+2, column=1, value=f"Rapor Adı: {rapor_adi}")
+            worksheet.cell(row=son_satir+3, column=1, value=f"Oluşturma Tarihi: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}") 
