@@ -8,6 +8,7 @@ from gorsel_gosterici import GorselGosterici
 from maliyet_raporu import MaliyetRaporu
 from db_connection import DatabaseConnection
 from rapor_goruntule import RaporGoruntule
+from detayli_maliyet_raporu import DetayliMaliyetRaporu
 
 class TostMakinesiUygulamasi(QMainWindow):
     def __init__(self):
@@ -161,6 +162,24 @@ class TostMakinesiUygulamasi(QMainWindow):
         
         right_layout.addWidget(self.tab_widget)
         
+        # Detaylı Maliyet Raporu butonu
+        self.detayli_rapor_btn = QPushButton("Detaylı Maliyet Raporu")
+        self.detayli_rapor_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 10px;
+                font-size: 14px;
+                border-radius: 4px;
+                margin-top: 10px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        self.detayli_rapor_btn.clicked.connect(self.detayli_rapor_goster)
+        right_layout.addWidget(self.detayli_rapor_btn)
+        
         # Sağ frame'i ana layout'a ekle
         layout.addWidget(right_frame)
         
@@ -271,6 +290,11 @@ class TostMakinesiUygulamasi(QMainWindow):
             elif self.ana_combo.currentIndex() < self.ana_combo.count() - 1:
                 # Eğer son alt kategorideysek ve başka ana kategori varsa
                 self.ana_combo.setCurrentIndex(self.ana_combo.currentIndex() + 1)
+
+    def detayli_rapor_goster(self):
+        """Detaylı maliyet raporu penceresini gösterir"""
+        detayli_rapor = DetayliMaliyetRaporu(self.secili_parcalar)
+        detayli_rapor.exec_()  # show() yerine exec_() kullan
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
