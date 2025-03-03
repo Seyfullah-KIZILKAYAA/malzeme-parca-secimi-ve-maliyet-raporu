@@ -6,6 +6,8 @@ from datetime import datetime
 import pandas as pd
 import os
 import shutil
+from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
+from openpyxl.utils import get_column_letter
 
 class MaliyetRaporu(QWidget):
     def __init__(self):
@@ -355,18 +357,77 @@ class MaliyetRaporu(QWidget):
         with pd.ExcelWriter(dosya_yolu, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name="Maliyet Raporu", index=False)
             
-            # Toplam maliyet bilgisini ekle
+            # Stil ayarları
             workbook = writer.book
             worksheet = writer.sheets["Maliyet Raporu"]
             
+            # Başlık stili
+            header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+            header_font = Font(color="FFFFFF", bold=True)
+            
+            # Kenarlık stili
+            border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            # Başlıkları formatla
+            for cell in worksheet[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.border = border
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            # Satırları formatla
+            row_colors = ["E8F1F5", "FFFFFF"]  # Açık mavi ve beyaz
+            for row_idx, row in enumerate(worksheet.iter_rows(min_row=2), start=2):
+                # Alternatif satır renkleri
+                color = row_colors[(row_idx - 2) % 2]
+                for cell in row:
+                    cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+                    cell.border = border
+                    cell.alignment = Alignment(horizontal='left', vertical='center')
+                    
+                    # Sayısal değerler için sağa hizalama
+                    if isinstance(cell.value, (int, float)):
+                        cell.alignment = Alignment(horizontal='right', vertical='center')
+                        # Para birimi formatı
+                        if "Fiyat" in worksheet.cell(row=1, column=cell.column).value:
+                            cell.number_format = '#,##0.00 "TL"'
+            
             # Toplam satırı ekle
             son_satir = len(df) + 2  # Başlık satırı ve boş satır için +2
-            worksheet.cell(row=son_satir, column=1, value="TOPLAM")
-            worksheet.cell(row=son_satir, column=5, value=toplam_maliyet)
+            worksheet.cell(row=son_satir, column=1, value="TOPLAM").font = Font(bold=True)
+            toplam_cell = worksheet.cell(row=son_satir, column=5, value=toplam_maliyet)
+            toplam_cell.font = Font(bold=True)
+            toplam_cell.number_format = '#,##0.00 "TL"'
+            
+            # Toplam satırı stil
+            for col in range(1, 6):
+                cell = worksheet.cell(row=son_satir, column=col)
+                cell.border = border
+                cell.fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+                cell.font = Font(color="FFFFFF", bold=True)
             
             # Rapor adı ve tarih bilgisini ekle
-            worksheet.cell(row=son_satir+2, column=1, value=f"Rapor Adı: {rapor_adi}")
-            worksheet.cell(row=son_satir+3, column=1, value=f"Oluşturma Tarihi: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+            info_row = son_satir + 2
+            worksheet.cell(row=info_row, column=1, value=f"Rapor Adı: {rapor_adi}").font = Font(italic=True)
+            worksheet.cell(row=info_row + 1, column=1, value=f"Oluşturma Tarihi: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}").font = Font(italic=True)
+            
+            # Sütun genişliklerini otomatik ayarla
+            for column in worksheet.columns:
+                max_length = 0
+                column = [cell for cell in column]
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = (max_length + 2)
+                worksheet.column_dimensions[get_column_letter(column[0].column)].width = adjusted_width
     
     def parca_secimi_degistir(self, item):
         """Tabloda çift tıklanan parçanın seçimini değiştirmek için"""
