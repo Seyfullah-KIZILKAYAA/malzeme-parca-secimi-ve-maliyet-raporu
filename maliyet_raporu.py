@@ -87,27 +87,30 @@ class MaliyetRaporu(QWidget):
         # Parça listesi için tablo
         self.tablo = QTableWidget()
         self.tablo.setColumnCount(4)  # 4 sütun: Alt Kategori, Seçilen Parça, Birim Fiyat, Toplam Fiyat
-        self.tablo.setHorizontalHeaderLabels(["Alt Kategori", "Seçilen Parça", "Birim Fiyat", "Toplam Fiyat"])
+        self.tablo.setHorizontalHeaderLabels(["Alt Kategori", "Parça Adı", "Birim Fiyat", "Toplam Fiyat"])
+        
+        # Tablonun boyutunu küçült
+        self.tablo.setMaximumHeight(300)  # Maksimum yüksekliği 300 piksel olarak ayarla
+        self.tablo.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tablo.verticalHeader().setVisible(False)
+        
+        # Tablo stil ayarları
         self.tablo.setStyleSheet("""
             QTableWidget {
-                font-size: 14px;
-                gridline-color: #d0d0d0;
-                border: 1px solid #c0c0c0;
-                border-radius: 5px;
+                background-color: white;
+                gridline-color: #d3d3d3;
+                border: 1px solid #d3d3d3;
             }
             QHeaderView::section {
                 background-color: #f0f0f0;
                 padding: 6px;
-                font-size: 14px;
+                border: 1px solid #d3d3d3;
                 font-weight: bold;
-                border: 1px solid #c0c0c0;
             }
             QTableWidget::item {
                 padding: 5px;
             }
         """)
-        self.tablo.setMinimumHeight(250)  # Tablo yüksekliğini artır
-        self.tablo.setMinimumWidth(600)   # Tablo minimum genişliğini artır
         
         # Çift tıklama sinyalini bağla
         self.tablo.itemDoubleClicked.connect(self.parca_secimi_degistir)
