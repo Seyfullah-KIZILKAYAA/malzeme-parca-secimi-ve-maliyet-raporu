@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, QMessageBox, 
                             QFileDialog, QInputDialog, QLineEdit, QDialog, QFormLayout, QHBoxLayout,
-                            QListWidget, QListWidgetItem)
+                            QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem, QHeaderView)
 from PyQt5.QtCore import Qt
 from datetime import datetime
 import pandas as pd
