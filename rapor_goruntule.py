@@ -1,12 +1,13 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, QMessageBox, 
                             QFileDialog, QInputDialog, QLineEdit, QDialog, QFormLayout, QHBoxLayout,
-                            QListWidget, QListWidgetItem)
+                            QListWidget, QListWidgetItem, QTableWidget, QHeaderView, QTableWidgetItem, QStyle)
 from PyQt5.QtCore import Qt
 from datetime import datetime
 import pandas as pd
 import os
 import shutil
 from rapor_karsilastirma import RaporKarsilastirma
+from PyQt5.QtWidgets import QApplication
 
 class RaporGoruntule(QWidget):
     def __init__(self):
@@ -188,49 +189,23 @@ class RaporGoruntule(QWidget):
         if secili_metin == "Henüz kaydedilmiş rapor bulunmamaktadır.":
             return
         
-        # Dosya adını oluştur
         try:
+            # Dosya adını oluştur
             rapor_adi = secili_metin.split(' - ')[0]
             tarih_str = secili_metin.split(' - ')[1]
             tarih_obj = datetime.strptime(tarih_str, "%d/%m/%Y %H:%M:%S")
             dosya_tarih = tarih_obj.strftime("%Y%m%d_%H%M%S")
             dosya_adi = f"{rapor_adi}_{dosya_tarih}.xlsx"
-        except:
-            # Hata durumunda tüm excel dosyalarını kontrol et
-            gecmis_klasoru = "gecmis"
-            excel_dosyalari = [f for f in os.listdir(gecmis_klasoru) if f.endswith('.xlsx')]
+            dosya_yolu = os.path.join("gecmis", dosya_adi)
             
-            # Seçili metni içeren dosyayı bul
-            for dosya in excel_dosyalari:
-                if rapor_adi in dosya:
-                    dosya_adi = dosya
-                    break
-            else:
-                QMessageBox.warning(self, "Hata", "Rapor dosyası bulunamadı.")
-                return
-        
-        dosya_yolu = os.path.join("gecmis", dosya_adi)
-        
-        # Dosyanın varlığını kontrol et
-        if not os.path.exists(dosya_yolu):
-            QMessageBox.warning(self, "Hata", f"Rapor dosyası bulunamadı:\n{dosya_yolu}")
-            return
-        
-        try:
-            # Excel dosyasını oku
+            # Excel dosyasını pandas ile oku
             df = pd.read_excel(dosya_yolu)
             
-            # Rapor görüntüleme penceresini aç
-            dialog = QDialog(self)
-            dialog.setWindowTitle(f"Rapor: {rapor_adi}")
-            dialog.setMinimumSize(800, 600)
-            
-            layout = QVBoxLayout(dialog)
-            
-            # Rapor başlığı
-            baslik = QLabel(f"Rapor: {rapor_adi}")
-            baslik.setStyleSheet("font-size: 16px; font-weight: bold; color: #333; padding: 5px;")
-            layout.addWidget(baslik)
+            # Yeni dialog penceresi oluştur
+            rapor_pencere = QDialog(self)
+            rapor_pencere.setWindowTitle(f"Rapor: {rapor_adi}")
+            rapor_pencere.setMinimumSize(800, 400)
+            rapor_layout = QVBoxLayout(rapor_pencere)
             
             # Tablo oluştur
             tablo = QTableWidget()
@@ -239,60 +214,49 @@ class RaporGoruntule(QWidget):
             tablo.setHorizontalHeaderLabels(df.columns)
             
             # Verileri tabloya ekle
-            for row in range(len(df)):
-                for col in range(len(df.columns)):
-                    item = QTableWidgetItem(str(df.iloc[row, col]))
-                    tablo.setItem(row, col, item)
+            for i in range(len(df)):
+                for j in range(len(df.columns)):
+                    item = QTableWidgetItem(str(df.iloc[i, j]))
+                    tablo.setItem(i, j, item)
             
-            # Tablo stilini ayarla
+            # Tablo ayarları
+            tablo.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             tablo.setStyleSheet("""
                 QTableWidget {
-                    font-size: 14px;
-                    gridline-color: #d0d0d0;
-                    border: 1px solid #c0c0c0;
-                    border-radius: 5px;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    background-color: white;
+                    gridline-color: #eee;
                 }
                 QHeaderView::section {
-                    background-color: #f0f0f0;
-                    padding: 6px;
-                    font-size: 14px;
-                    font-weight: bold;
-                    border: 1px solid #c0c0c0;
-                }
-                QTableWidget::item {
-                    padding: 5px;
+                    background-color: #f8f9fa;
+                    padding: 4px;
+                    border: none;
+                    border-bottom: 1px solid #ddd;
                 }
             """)
             
-            # Sütun genişliklerini ayarla
-            header = tablo.horizontalHeader()
-            for i in range(len(df.columns)):
-                header.setSectionResizeMode(i, QHeaderView.Stretch)
+            rapor_layout.addWidget(tablo)
             
-            layout.addWidget(tablo)
-            
-            # Kapat butonu
-            kapat_button = QPushButton("Kapat")
-            kapat_button.setStyleSheet("""
+            # Kapat butonu ekle
+            kapat_btn = QPushButton("Kapat")
+            kapat_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #2196F3;
+                    background-color: #dc3545;
                     color: white;
+                    padding: 8px 16px;
+                    border-radius: 4px;
                     font-weight: bold;
-                    padding: 10px;
-                    border-radius: 5px;
-                    font-size: 14px;
                 }
                 QPushButton:hover {
-                    background-color: #1976D2;
-                }
-                QPushButton:pressed {
-                    background-color: #0D47A1;
+                    background-color: #c82333;
                 }
             """)
-            kapat_button.clicked.connect(dialog.accept)
-            layout.addWidget(kapat_button)
+            kapat_btn.clicked.connect(rapor_pencere.close)
+            rapor_layout.addWidget(kapat_btn)
             
-            dialog.exec_()
+            # Pencereyi göster
+            rapor_pencere.exec_()
             
         except Exception as e:
             QMessageBox.critical(self, "Hata", f"Rapor açılırken bir hata oluştu:\n{str(e)}")
